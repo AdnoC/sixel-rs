@@ -5,6 +5,10 @@ extern crate semver_parser;
 extern crate lazy_static;
 
 pub mod version;
+pub mod status;
+pub mod encoder;
+mod optflags;
+mod msc;
 
 
 #[cfg(test)]

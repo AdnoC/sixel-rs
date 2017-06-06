@@ -1,6 +1,6 @@
-
 use semver_parser::version::{Version, parse};
 use sixel::{LIBSIXEL_VERSION, LIBSIXEL_ABI_VERSION};
+
 use std::str;
 use std::ffi::CStr;
 
