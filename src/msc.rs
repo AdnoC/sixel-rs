@@ -20,6 +20,6 @@ pub fn path_to_c_str(path: &Path) -> Status<CString> {
 
     match CString::new(path_bytes) {
         Ok(s) => Ok(s),
-        Err(_) => Err(status::Error::BadArgument)
+        Err(_) => Err(status::Error::BadArgument),
     }
 }

@@ -4,7 +4,7 @@ use sixel::{LIBSIXEL_VERSION, LIBSIXEL_ABI_VERSION};
 use std::str;
 use std::ffi::CStr;
 
-fn remove_version_suffix<'a>(version: &'a str) -> &'a str{
+fn remove_version_suffix<'a>(version: &'a str) -> &'a str {
     version.trim_right_matches("\u{0}")
 }
 
@@ -44,12 +44,14 @@ mod tests {
 
     #[test]
     fn from_utf8_versions() {
-        let lib_eq = (&LIBSIXEL_VERSION).iter()
+        let lib_eq = (&LIBSIXEL_VERSION)
+            .iter()
             .zip(SIXEL_VERSION_STR.as_bytes())
             .all(|(a, b)| a == b);
         assert!(lib_eq);
 
-        let abi_eq = (&LIBSIXEL_VERSION).iter()
+        let abi_eq = (&LIBSIXEL_VERSION)
+            .iter()
             .zip(SIXEL_VERSION_STR.as_bytes())
             .all(|(a, b)| a == b);
         assert!(abi_eq);
@@ -70,8 +72,8 @@ mod tests {
         version_same(&*SIXEL_ABI_VERSION, &lib_version_str);
     }
 
-    fn version_same<T>(lazy: T, expected: &str) where
-         T: Deref<Target=Version>
+    fn version_same<T>(lazy: T, expected: &str)
+        where T: Deref<Target = Version>
     {
         let lib_version_str = remove_version_suffix(expected);
         // println!("test_str: {:?}", lib_version_str);

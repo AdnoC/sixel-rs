@@ -2,6 +2,8 @@ use sixel::*;
 
 pub type Status<T> = Result<T, Error>;
 
+// NOTE: Sometimes a message can accompany errors.
+// These can be acquired with `sixel_helper_get_additional_message`
 #[derive(Debug)]
 pub enum Error {
     False,
@@ -21,7 +23,7 @@ pub enum Error {
     GD,
     LibC,
     Curl,
-    Other
+    Other,
 }
 
 #[doc(hidden)]
@@ -45,8 +47,6 @@ pub fn from_libsixel(status: SIXELSTATUS) -> Status<()> {
         SIXEL_GD_ERROR => Err(Error::GD),
         SIXEL_LIBC_ERROR => Err(Error::LibC),
         SIXEL_CURL_ERROR => Err(Error::Curl),
-        _ => panic!("Unkown sixel error")
+        _ => panic!("Unkown sixel error"),
     }
 }
-
-
