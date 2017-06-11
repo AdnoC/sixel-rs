@@ -1,4 +1,5 @@
 use sixel::*;
+use std::cell::Cell;
 use status;
 use status::Status;
 use optflags;
@@ -40,7 +41,7 @@ impl Encoder {
     pub fn set_cancel(&self, cancel: Canceller) -> Status<()> {
         let result;
         unsafe {
-            result = sixel_encoder_set_cancel_flag(self.encoder, cancel.flag);
+            result = sixel_encoder_set_cancel_flag(self.encoder, (&cancel.flag).as_ptr());
         }
         status::from_libsixel(result)
     }
@@ -419,37 +420,43 @@ impl Drop for Encoder {
     }
 }
 
+
 // TODO: Get working with stack values
-// Drop impl means it won't work as-is
 pub struct Canceller {
-    flag: *mut c_int,
+    flag: Box<Cell<c_int>>
 }
 
 impl Canceller {
     pub fn new() -> Canceller {
-        let flag: Box<c_int> = Box::new(0);
-        let flag = Box::into_raw(flag);
+        let flag: Box<Cell<c_int>> = Box::new(Cell::new(0));
+        // let flag_raw = Box::into_raw(flag);
+        // let flag;
+        // unsafe {
+        //     flag: &'a Cell<c_int> = &*flag_raw;
+        // }
 
         Canceller { flag }
     }
 
     pub fn cancel(&self) {
-        unsafe {
-            *self.flag = 1;
-        }
+        self.flag.set(1);
+        // unsafe {
+        //     // *self.flag = 1;
+        // }
     }
 
     pub fn reset(&self) {
-        unsafe {
-            *self.flag = 0;
-        }
+        self.flag.set(0);
+        // unsafe {
+        //     // *self.flag = 0;
+        // }
     }
 }
 
-impl Drop for Canceller {
-    fn drop(&mut self) {
-        unsafe {
-            Box::from_raw(self.flag);
-        }
-    }
-}
+// impl<'a> Drop for Canceller<'a> {
+//     fn drop(&mut self) {
+//         unsafe {
+//             Box::from_raw(self.flag.as_ptr());
+//         }
+//     }
+// }
