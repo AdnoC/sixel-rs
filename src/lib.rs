@@ -13,6 +13,7 @@ pub mod encoder;
 // Should it be pub?
 mod optflags;
 mod msc;
+mod pixelformat;
 
 
 #[cfg(test)]

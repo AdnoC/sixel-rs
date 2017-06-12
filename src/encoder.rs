@@ -1,8 +1,10 @@
 use sixel::*;
-use std::cell::Cell;
 use status;
-use status::Status;
 use optflags;
+use pixelformat;
+
+use std::cell::Cell;
+use status::Status;
 use std::os::raw::c_int;
 use std::os::raw::c_char;
 use std::path::Path;
@@ -37,6 +39,24 @@ impl Encoder {
         Encoder { encoder }
 
     }
+
+    pub fn encode_file(&self, source: &Path) -> Status<()> {
+        use msc;
+
+        let cstr = msc::path_to_c_str(source)?;
+
+        let result;
+        unsafe {
+            result = sixel_encoder_encode(self.encoder, cstr.as_ptr());
+        }
+        status::from_libsixel(result)
+    }
+
+    // pub fn encode_bytes(&self, frame: QuickFrame, palette: Vec<)
+}
+
+// Optflags
+impl Encoder {
 
     pub fn set_cancel(&self, cancel: Canceller) -> Status<()> {
         let result;
@@ -460,3 +480,144 @@ impl Canceller {
 //         }
 //     }
 // }
+
+pub struct QuickFrameBuilder {
+    width: usize,
+    height: usize,
+    format: pixelformat::PixelFormat,
+}
+
+impl QuickFrameBuilder {
+    pub fn new() -> QuickFrameBuilder {
+        use pixelformat::PixelFormat;
+
+        QuickFrameBuilder { 
+            width: 0,
+            height: 0,
+            format: PixelFormat::RGB888,
+        }
+    }
+
+    pub fn width(mut self, width: usize) -> QuickFrameBuilder {
+        self.width = width;
+        self
+    }
+    pub fn height(mut self, height: usize) -> QuickFrameBuilder {
+        self.height = height;
+        self
+    }
+    pub fn format(mut self, format: pixelformat::PixelFormat) -> QuickFrameBuilder {
+        self.format = format;
+        self
+    }
+
+    pub fn finalize(self) -> QuickFrame {
+        let depth = self.format.channels_per_pixel() as usize;
+        let size = self.width * self.height * depth;
+        let pixels: Vec<u8> = Vec::with_capacity(size);
+
+        QuickFrame {
+            width: self.width,
+            height: self.height,
+            format: self.format,
+            pixels
+        }
+    }
+    pub fn pixels(self, pixels: Vec<u8>) -> QuickFrame {
+        let depth = self.format.channels_per_pixel() as usize;
+        let size = self.width * self.height * depth;
+
+        assert_eq!(size, pixels.len());
+
+        QuickFrame {
+            width: self.width,
+            height: self.height,
+            format: self.format,
+            pixels
+        }
+    }
+}
+
+pub struct QuickFrame {
+    pixels: Vec<u8>,
+    width: usize,
+    height: usize,
+    format: pixelformat::PixelFormat
+}
+
+impl QuickFrame {
+    pub fn row(&self, row: usize) -> &[u8] {
+        let row_len = self.width * self.format.channels_per_pixel() as usize;
+
+        let row_start = (row - 1) * row_len;
+        let next_row_start = row * row_len;
+
+        &self.pixels[row_start..next_row_start]
+    }
+    pub fn row_mut(&mut self, row: usize) -> &mut [u8] {
+        let row_len = self.width * self.format.channels_per_pixel() as usize;
+
+        let row_start = (row - 1) * row_len;
+        let next_row_start = row * row_len;
+
+        &mut self.pixels[row_start..next_row_start]
+    }
+
+    pub fn pixel(&self, row: usize, column: usize) -> &[u8] {
+        let depth = self.format.channels_per_pixel() as usize;
+        let row_len = self.width * depth;
+
+        let row_start = (row - 1) * row_len;
+        let col_pos = column * depth;
+
+        let start = row_start + col_pos;
+        let end = start + depth;
+
+        &self.pixels[start..end]
+    }
+
+    pub fn pixel_mut(&mut self, row: usize, column: usize) -> &mut [u8] {
+        let depth = self.format.channels_per_pixel() as usize;
+        let row_len = self.width * depth;
+
+        let row_start = (row - 1) * row_len;
+        let col_pos = column * depth;
+
+        let start = row_start + col_pos;
+        let end = start + depth;
+
+        &mut self.pixels[start..end]
+    }
+
+    pub fn color(&self, row: usize, column: usize, depth: usize) -> u8 {
+        let pix_depth = self.format.channels_per_pixel() as usize;
+
+        assert!(depth < pix_depth,
+                "Gave a depth of {} when a pixel is only {} bytes deep",
+                depth,
+                pix_depth);
+
+        let row_len = self.width * pix_depth;
+
+        let row_start = (row - 1) * row_len;
+        let col_pos = column * pix_depth;
+
+        self.pixels[row_start + col_pos + depth]
+    }
+
+    pub fn set_color(&mut self, row: usize, column: usize, depth: usize, color: u8) {
+        let pix_depth = self.format.channels_per_pixel() as usize;
+
+        assert!(depth < pix_depth,
+                "Gave a depth of {} when a pixel is only {} bytes deep",
+                depth,
+                pix_depth);
+
+        let row_len = self.width * pix_depth;
+
+        let row_start = (row - 1) * row_len;
+        let col_pos = column * pix_depth;
+
+        self.pixels[row_start + col_pos + depth] = color;
+    }
+}
