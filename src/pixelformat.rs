@@ -24,7 +24,7 @@ pub enum PixelFormat {
     PAL1,
     PAL2,
     PAL4,
-    PAL8
+    PAL8,
 }
 
 impl PixelFormat {
@@ -52,99 +52,164 @@ impl PixelFormat {
             PAL1 => SIXEL_PIXELFORMAT_PAL1,
             PAL2 => SIXEL_PIXELFORMAT_PAL2,
             PAL4 => SIXEL_PIXELFORMAT_PAL4,
-            PAL8 => SIXEL_PIXELFORMAT_PAL8
+            PAL8 => SIXEL_PIXELFORMAT_PAL8,
         }
     }
 
     pub fn channels_per_pixel(self) -> c_int {
-        unsafe {
-            sixel::sixel_helper_compute_depth(self.to_libsixel() as c_int)
-        }
+        unsafe { sixel::sixel_helper_compute_depth(self.to_libsixel() as c_int) }
     }
 }
 
-pub trait Color {
-    fn depth(&self) -> usize;
+// pub trait Color {
+//     fn depth(&self) -> usize;
+//
+//     fn at(&self, index: usize) -> u8 {
+//         assert!(self.depth() < index);
+//         self.all()[index]
+//     }
+//
+//     fn set(&mut self, index: usize, val: u8) {
+//         assert!(self.depth() < index);
+//         self.all_mut()[index] = val;
+//     }
+//     fn all(&self) -> &[u8];
+//
+//     fn all_mut(&mut self) -> &mut [u8];
+// }
+//
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+// #[repr(C)]
+// pub struct Color1([u8; 1]);
+//
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+// #[repr(C)]
+// pub struct Color2([u8; 2]);
+//
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+// #[repr(C)]
+// pub struct Color3([u8; 3]);
+//
+// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+// #[repr(C)]
+// pub struct Color4([u8; 4]);
+//
+// impl Color for Color1 {
+//     fn depth(&self) -> usize {
+//         1
+//     }
+//
+//     fn all(&self) -> &[u8] {
+//         &self.0
+//     }
+//
+//     fn all_mut(&mut self) -> &mut [u8] {
+//         &mut self.0
+//     }
+// }
+// impl Color for Color2 {
+//     fn depth(&self) -> usize {
+//         2
+//     }
+//
+//     fn all(&self) -> &[u8] {
+//         &self.0
+//     }
+//
+//     fn all_mut(&mut self) -> &mut [u8] {
+//         &mut self.0
+//     }
+// }
+// impl Color for Color3 {
+//     fn depth(&self) -> usize {
+//         3
+//     }
+//
+//     fn all(&self) -> &[u8] {
+//         &self.0
+//     }
+//
+//     fn all_mut(&mut self) -> &mut [u8] {
+//         &mut self.0
+//     }
+// }
+// impl Color for Color4 {
+//     fn depth(&self) -> usize {
+//         4
+//     }
+//
+//     fn all(&self) -> &[u8] {
+//         &self.0
+//     }
+//
+//     fn all_mut(&mut self) -> &mut [u8] {
+//         &mut self.0
+//     }
+// }
 
-    fn at(&self, index: usize) -> u8 {
-        assert!(self.depth() < index);
-        self.all()[index]
-    }
+// Piston Image library used for reference for this bit. Thanks
 
-    fn set(&mut self, index: usize, val: u8) {
-        assert!(self.depth() < index);
-        self.all_mut()[index] = val;
-    }
-    fn all(&self) -> &[u8];
+pub trait Pixel {
+    fn num_channels() -> u8;
 
-    fn all_mut(&mut self) -> &mut [u8];
+    fn channels(&self) -> &[u8];
+
+    fn channels_mut(&mut self) -> &mut [u8];
+
+    fn from_slice<'a>(&'a [u8]) -> &'a Self;
+
+    fn from_slice_mut<'a>(&'a mut [u8]) -> &'a mut Self;
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub struct Color1([u8; 1]);
+macro_rules! define_colors {
+    {$(
+            $ident: ident,
+            $channels: expr;
+      )*} => {
+        $(
+            #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+            #[repr(C)]
+            pub struct $ident {
+                pub data: [u8; $channels]
+            }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub struct Color2([u8; 2]);
+            impl Pixel for $ident {
+                fn num_channels() -> u8 {
+                    $channels
+                }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub struct Color3([u8; 3]);
+                fn channels(&self) -> &[u8] {
+                    &self.data
+                }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub struct Color4([u8; 4]);
+                fn channels_mut(&mut self) -> &mut [u8] {
+                    &mut self.data
+                }
 
-impl Color for Color1 {
-    fn depth(&self) -> usize {
-        1
-    }
+                fn from_slice<'a>(slice: &'a [u8]) -> &'a $ident {
+                    use std::mem;
+                    assert_eq!(slice.len(), $channels);
+                    unsafe {
+                        mem::transmute(slice.as_ptr())
+                    }
+                }
 
-    fn all(&self) -> &[u8] {
-        &self.0
-    }
+                fn from_slice_mut<'a>(slice: &'a mut [u8]) -> &'a mut $ident {
+                    use std::mem;
+                    assert_eq!(slice.len(), $channels);
+                    unsafe {
+                        mem::transmute(slice.as_ptr())
+                    }
+                }
 
-    fn all_mut(&mut self) -> &mut [u8] {
-        &mut self.0
-    }
-}
-impl Color for Color2 {
-    fn depth(&self) -> usize {
-        2
-    }
-
-    fn all(&self) -> &[u8] {
-        &self.0
-    }
-
-    fn all_mut(&mut self) -> &mut [u8] {
-        &mut self.0
-    }
-}
-impl Color for Color3 {
-    fn depth(&self) -> usize {
-        3
-    }
-
-    fn all(&self) -> &[u8] {
-        &self.0
-    }
-
-    fn all_mut(&mut self) -> &mut [u8] {
-        &mut self.0
+            }
+         )*
     }
 }
-impl Color for Color4 {
-    fn depth(&self) -> usize {
-        4
-    }
 
-    fn all(&self) -> &[u8] {
-        &self.0
-    }
-
-    fn all_mut(&mut self) -> &mut [u8] {
-        &mut self.0
-    }
+define_colors!{
+    Color1, 1;
+    Color2, 2;
+    Color3, 3;
+    Color4, 4;
 }

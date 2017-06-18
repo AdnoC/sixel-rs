@@ -708,6 +708,7 @@ extern "C" {
 }
 extern "C" {
     pub fn sixel_encoder_encode_bytes(encoder: *mut sixel_encoder_t,
+                                      // length = width * height * depth
                                       bytes: *mut ::std::os::raw::c_uchar,
                                       width: ::std::os::raw::c_int,
                                       height: ::std::os::raw::c_int,

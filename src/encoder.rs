@@ -2,11 +2,11 @@ use sixel::*;
 use status;
 use optflags;
 use pixelformat;
+use pixelformat::Pixel;
 
 use std::cell::Cell;
 use status::Status;
-use std::os::raw::c_int;
-use std::os::raw::c_char;
+use std::os::raw;
 use std::path::Path;
 
 pub struct Encoder {
@@ -45,32 +45,44 @@ impl Encoder {
 
         let cstr = msc::path_to_c_str(source)?;
 
-        let result;
-        unsafe {
-            result = sixel_encoder_encode(self.encoder, cstr.as_ptr());
-        }
+        let result = unsafe { sixel_encoder_encode(self.encoder, cstr.as_ptr()) };
         status::from_libsixel(result)
     }
 
-    // pub fn encode_bytes(&self, frame: QuickFrame, palette: Vec<)
+    pub fn encode_bytes<P: Pixel>(&self, frame: QuickFrame, palette: Vec<P>) -> Status<()> {
+        use std::os::raw::c_int;
+        use std::os::raw::c_uchar;
+
+        {
+            let frame_size = frame.height * frame.width;
+            let frame_size = frame_size * frame.format.channels_per_pixel() as usize;
+            let palette_size = palette.len() * frame.format.channels_per_pixel() as usize;
+            assert_eq!(frame_size, palette_size);
+        }
+
+        let result = unsafe {
+            sixel_encoder_encode_bytes(self.encoder,
+                                       frame.pixels.as_ptr() as *mut c_uchar,
+                                       frame.width as c_int,
+                                       frame.height as c_int,
+                                       frame.format.to_libsixel() as c_int,
+                                       palette.as_ptr() as *mut c_uchar,
+                                       palette.len() as c_int)
+        };
+        status::from_libsixel(result)
+    }
 }
 
 // Optflags
 impl Encoder {
-
     pub fn set_cancel(&self, cancel: Canceller) -> Status<()> {
-        let result;
-        unsafe {
-            result = sixel_encoder_set_cancel_flag(self.encoder, (&cancel.flag).as_ptr());
-        }
+        let result =
+            unsafe { sixel_encoder_set_cancel_flag(self.encoder, (&cancel.flag).as_ptr()) };
         status::from_libsixel(result)
     }
 
-    fn set_opt(&self, opt: optflags::OptflagUnderlying, arg: *const c_char) -> Status<()> {
-        let result;
-        unsafe {
-            result = sixel_encoder_setopt(self.encoder, opt as c_int, arg);
-        }
+    fn set_opt(&self, opt: optflags::OptflagUnderlying, arg: *const raw::c_char) -> Status<()> {
+        let result = unsafe { sixel_encoder_setopt(self.encoder, opt as raw::c_int, arg) };
         status::from_libsixel(result)
     }
 
@@ -443,16 +455,16 @@ impl Drop for Encoder {
 
 // TODO: Get working with stack values
 pub struct Canceller {
-    flag: Box<Cell<c_int>>
+    flag: Box<Cell<raw::c_int>>,
 }
 
 impl Canceller {
     pub fn new() -> Canceller {
-        let flag: Box<Cell<c_int>> = Box::new(Cell::new(0));
+        let flag: Box<Cell<raw::c_int>> = Box::new(Cell::new(0));
         // let flag_raw = Box::into_raw(flag);
         // let flag;
         // unsafe {
-        //     flag: &'a Cell<c_int> = &*flag_raw;
+        //     flag: &'a Cell<raw::c_int> = &*flag_raw;
         // }
 
         Canceller { flag }
@@ -491,7 +503,7 @@ impl QuickFrameBuilder {
     pub fn new() -> QuickFrameBuilder {
         use pixelformat::PixelFormat;
 
-        QuickFrameBuilder { 
+        QuickFrameBuilder {
             width: 0,
             height: 0,
             format: PixelFormat::RGB888,
@@ -520,7 +532,7 @@ impl QuickFrameBuilder {
             width: self.width,
             height: self.height,
             format: self.format,
-            pixels
+            pixels,
         }
     }
     pub fn pixels(self, pixels: Vec<u8>) -> QuickFrame {
@@ -533,7 +545,7 @@ impl QuickFrameBuilder {
             width: self.width,
             height: self.height,
             format: self.format,
-            pixels
+            pixels,
         }
     }
 }
@@ -542,7 +554,7 @@ pub struct QuickFrame {
     pixels: Vec<u8>,
     width: usize,
     height: usize,
-    format: pixelformat::PixelFormat
+    format: pixelformat::PixelFormat,
 }
 
 impl QuickFrame {
