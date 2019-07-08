@@ -1,6 +1,6 @@
 [package]
 name = "sixel"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["AdnoC <adam.r.cutler@gmail.com>"]
 license = "MIT"
 
