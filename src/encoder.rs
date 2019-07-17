@@ -49,16 +49,12 @@ impl Encoder {
         status::from_libsixel(result)
     }
 
-    pub fn encode_bytes(&self, frame: QuickFrame, palette: Vec<crate::pixelformat::Color3>) -> Status<()> {
+    pub fn encode_bytes(&self, frame: QuickFrame) -> Status<()> {
         use std::os::raw::c_int;
         use std::os::raw::c_uchar;
 
-        {
-            let frame_size = frame.height * frame.width;
-            let frame_size = frame_size * frame.format.channels_per_pixel() as usize;
-            let palette_size = palette.len() * frame.format.channels_per_pixel() as usize;
-            assert_eq!(frame_size, palette_size);
-        }
+        // Not used?
+        let palette: Vec<crate::pixelformat::Color3> = vec![];
 
         let result = unsafe {
             sixel_encoder_encode_bytes(self.encoder,
