@@ -7,13 +7,12 @@ extern crate semver_parser;
 #[macro_use]
 extern crate lazy_static;
 
-pub mod version;
 pub mod status;
 pub mod encoder;
 // Should it be pub?
-mod optflags;
+pub mod optflags;
 mod msc;
-mod pixelformat;
+pub mod pixelformat;
 
 
 #[cfg(test)]

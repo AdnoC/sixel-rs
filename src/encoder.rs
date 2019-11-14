@@ -1,8 +1,7 @@
 use sixel::*;
 use status;
 use optflags;
-use pixelformat;
-use pixelformat::Pixel;
+use pixelformat::{Pixel, PixelFormatChan};
 
 use std::cell::Cell;
 use status::Status;
@@ -10,17 +9,18 @@ use std::os::raw;
 use std::path::Path;
 
 pub struct Encoder {
-    encoder: *mut sixel_encoder_t,
+    encoder: *mut sixel::Encoder,
 }
 
 impl Encoder {
     pub fn new() -> Status<Encoder> {
         use std::ptr;
 
-        let mut encoder: *mut sixel_encoder_t = ptr::null_mut() as *mut _;
+        let mut encoder: *mut sixel::Encoder  = ptr::null_mut() as *mut _;
 
         unsafe {
-            let result = sixel_encoder_new(&mut encoder, ptr::null_mut() as *mut sixel_allocator_t);
+            let result = sixel_encoder_new(&mut encoder,
+                                           ptr::null_mut() as *mut Allocator);
 
             status::from_libsixel(result)?;
         }
@@ -49,23 +49,19 @@ impl Encoder {
         status::from_libsixel(result)
     }
 
-    pub fn encode_bytes<P: Pixel>(&self, frame: QuickFrame, palette: Vec<P>) -> Status<()> {
+    pub fn encode_bytes(&self, frame: QuickFrame) -> Status<()> {
         use std::os::raw::c_int;
         use std::os::raw::c_uchar;
 
-        {
-            let frame_size = frame.height * frame.width;
-            let frame_size = frame_size * frame.format.channels_per_pixel() as usize;
-            let palette_size = palette.len() * frame.format.channels_per_pixel() as usize;
-            assert_eq!(frame_size, palette_size);
-        }
+        // Not used?
+        let palette: Vec<crate::pixelformat::Color3> = vec![];
 
         let result = unsafe {
             sixel_encoder_encode_bytes(self.encoder,
                                        frame.pixels.as_ptr() as *mut c_uchar,
                                        frame.width as c_int,
                                        frame.height as c_int,
-                                       frame.format.to_libsixel() as c_int,
+                                       frame.format,
                                        palette.as_ptr() as *mut c_uchar,
                                        palette.len() as c_int)
         };
@@ -81,8 +77,8 @@ impl Encoder {
         status::from_libsixel(result)
     }
 
-    fn set_opt(&self, opt: optflags::OptflagUnderlying, arg: *const raw::c_char) -> Status<()> {
-        let result = unsafe { sixel_encoder_setopt(self.encoder, opt as raw::c_int, arg) };
+    fn set_opt(&self, opt: Optflag, arg: *const raw::c_char) -> Status<()> {
+        let result = unsafe { sixel_encoder_setopt(self.encoder, opt, arg) };
         status::from_libsixel(result)
     }
 
@@ -91,7 +87,7 @@ impl Encoder {
 
         let cstr = msc::path_to_c_str(file)?;
 
-        self.set_opt(SIXEL_OPTFLAG_OUTPUT, cstr.as_ptr())
+        self.set_opt(Optflag::OutFile, cstr.as_ptr())
     }
 
     pub fn set_bit_mode(&self, mode: optflags::BitMode) -> Status<()> {
@@ -99,8 +95,8 @@ impl Encoder {
         use optflags::BitMode;
 
         let mode_flag = match mode {
-            BitMode::SevenBit => SIXEL_OPTFLAG_7BIT_MODE,
-            BitMode::EightBit => SIXEL_OPTFLAG_8BIT_MODE,
+            BitMode::SevenBit => Optflag::UseSevenBitMode,
+            BitMode::EightBit => Optflag::UseEightBitMode,
         };
 
         self.set_opt(mode_flag, ptr::null())
@@ -109,7 +105,7 @@ impl Encoder {
     pub fn enable_gri_arg_limit(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_HAS_GRI_ARG_LIMIT, ptr::null())
+        self.set_opt(Optflag::HasGRIArgLimit, ptr::null())
     }
 
     pub fn set_num_colors_str(&self, num_colors: &str) -> Status<()> {
@@ -120,7 +116,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_COLORS, cstr.as_ptr())
+        self.set_opt(Optflag::NumColors, cstr.as_ptr())
     }
 
     // Calls Encoder::set_colors, but allocates a new String
@@ -144,19 +140,19 @@ impl Encoder {
 
         let cstr = msc::path_to_c_str(file)?;
 
-        self.set_opt(SIXEL_OPTFLAG_MAPFILE, cstr.as_ptr())
+        self.set_opt(Optflag::Mapfile, cstr.as_ptr())
     }
 
     fn use_monochrome(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_MONOCHROME, ptr::null())
+        self.set_opt(Optflag::Monochrome, ptr::null())
     }
 
     fn use_high_color(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_HIGH_COLOR, ptr::null())
+        self.set_opt(Optflag::UseHighColor, ptr::null())
     }
 
     fn use_builtin_palette(&self, option: &str) -> Status<()> {
@@ -167,7 +163,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_BUILTIN_PALETTE, cstr.as_ptr())
+        self.set_opt(Optflag::BuiltinPalette, cstr.as_ptr())
     }
 
     pub fn set_diffusion_str(&self, method: &str) -> Status<()> {
@@ -178,7 +174,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_DIFFUSION, cstr.as_ptr())
+        self.set_opt(Optflag::Diffusion, cstr.as_ptr())
     }
 
     pub fn set_diffusion(&self, method: optflags::DiffusionMethod) -> Status<()> {
@@ -193,7 +189,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_FIND_LARGEST, cstr.as_ptr())
+        self.set_opt(Optflag::FindLargest, cstr.as_ptr())
     }
 
     pub fn set_find_largest(&self, opt: optflags::FindLargestOpt) -> Status<()> {
@@ -208,7 +204,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_SELECT_COLOR, cstr.as_ptr())
+        self.set_opt(Optflag::SelectColor, cstr.as_ptr())
     }
 
     pub fn set_color_select(&self, meth: optflags::ColorSelectionMethod) -> Status<()> {
@@ -223,7 +219,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_CROP, cstr.as_ptr())
+        self.set_opt(Optflag::CropRegion, cstr.as_ptr())
     }
 
     pub fn set_crop(&self, width: i64, height: i64, x: i64, y: i64) -> Status<()> {
@@ -239,7 +235,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_WIDTH, cstr.as_ptr())
+        self.set_opt(Optflag::Width, cstr.as_ptr())
     }
 
     pub fn set_width(&self, width: optflags::SizeSpecification) -> Status<()> {
@@ -254,7 +250,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_HEIGHT, cstr.as_ptr())
+        self.set_opt(Optflag::Height, cstr.as_ptr())
     }
 
     pub fn set_height(&self, height: optflags::SizeSpecification) -> Status<()> {
@@ -269,7 +265,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_RESAMPLING, cstr.as_ptr())
+        self.set_opt(Optflag::Resampling, cstr.as_ptr())
     }
 
     pub fn set_resampling(&self, meth: optflags::ResampleMethod) -> Status<()> {
@@ -284,7 +280,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_QUALITY, cstr.as_ptr())
+        self.set_opt(Optflag::QualityMode, cstr.as_ptr())
     }
 
     pub fn set_quality(&self, opt: optflags::Quality) -> Status<()> {
@@ -299,7 +295,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_LOOPMODE, cstr.as_ptr())
+        self.set_opt(Optflag::LoopMode, cstr.as_ptr())
     }
 
     pub fn set_loopmode(&self, mode: optflags::LoopMode) -> Status<()> {
@@ -314,7 +310,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_PALETTE_TYPE, cstr.as_ptr())
+        self.set_opt(Optflag::PaletteType, cstr.as_ptr())
     }
 
     pub fn set_palette_type(&self, opt: optflags::PaletteType) -> Status<()> {
@@ -329,7 +325,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_BGCOLOR, cstr.as_ptr())
+        self.set_opt(Optflag::BackgroundColor, cstr.as_ptr())
     }
 
     pub fn set_background_color(&self, red: u8, green: u8, blue: u8) -> Status<()> {
@@ -341,19 +337,19 @@ impl Encoder {
     pub fn use_insecure(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_INSECURE, ptr::null())
+        self.set_opt(Optflag::Insecure, ptr::null())
     }
 
     pub fn use_invert(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_INVERT, ptr::null())
+        self.set_opt(Optflag::InvertBackground, ptr::null())
     }
 
     pub fn use_macro(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_USE_MACRO, ptr::null())
+        self.set_opt(Optflag::UseMacro, ptr::null())
     }
 
     pub fn set_macro_number_str(&self, num: &str) -> Status<()> {
@@ -364,7 +360,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_MACRO_NUMBER, cstr.as_ptr())
+        self.set_opt(Optflag::UseMacro, cstr.as_ptr())
     }
 
     pub fn set_macro_number(&self, num: i64) -> Status<()> {
@@ -375,25 +371,25 @@ impl Encoder {
     pub fn ignore_delay(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_IGNORE_DELAY, ptr::null())
+        self.set_opt(Optflag::IgnoreGIFDelay, ptr::null())
     }
 
     pub fn use_verbose(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_VERBOSE, ptr::null())
+        self.set_opt(Optflag::Verbose, ptr::null())
     }
 
-    pub fn use_statuc(&self) -> Status<()> {
+    pub fn use_static(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_STATIC, ptr::null())
+        self.set_opt(Optflag::StaticGIF, ptr::null())
     }
 
     pub fn use_penetrate(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_PENETRATE, ptr::null())
+        self.set_opt(Optflag::PenetrateScreen, ptr::null())
     }
 
     pub fn set_encode_policy_str(&self, pol: &str) -> Status<()> {
@@ -404,7 +400,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_ENCODE_POLICY, cstr.as_ptr())
+        self.set_opt(Optflag::EncodingPolicy, cstr.as_ptr())
     }
 
     pub fn set_encode_policy(&self, pol: optflags::EncodePolicy) -> Status<()> {
@@ -419,7 +415,7 @@ impl Encoder {
             Err(_) => return Err(status::Error::BadArgument),
         };
 
-        self.set_opt(SIXEL_OPTFLAG_COMPLEXION_SCORE, cstr.as_ptr())
+        self.set_opt(Optflag::ComplexionScore, cstr.as_ptr())
     }
 
     pub fn set_complexion_score(&self, score: i64) -> Status<()> {
@@ -430,7 +426,7 @@ impl Encoder {
     pub fn use_pipe_mode(&self) -> Status<()> {
         use std::ptr;
 
-        self.set_opt(SIXEL_OPTFLAG_PIPE_MODE, ptr::null())
+        self.set_opt(Optflag::PipeInput, ptr::null())
     }
 }
 
@@ -496,13 +492,11 @@ impl Canceller {
 pub struct QuickFrameBuilder {
     width: usize,
     height: usize,
-    format: pixelformat::PixelFormat,
+    format: PixelFormat,
 }
 
 impl QuickFrameBuilder {
     pub fn new() -> QuickFrameBuilder {
-        use pixelformat::PixelFormat;
-
         QuickFrameBuilder {
             width: 0,
             height: 0,
@@ -518,7 +512,7 @@ impl QuickFrameBuilder {
         self.height = height;
         self
     }
-    pub fn format(mut self, format: pixelformat::PixelFormat) -> QuickFrameBuilder {
+    pub fn format(mut self, format: PixelFormat) -> QuickFrameBuilder {
         self.format = format;
         self
     }
@@ -554,7 +548,7 @@ pub struct QuickFrame {
     pixels: Vec<u8>,
     width: usize,
     height: usize,
-    format: pixelformat::PixelFormat,
+    format: PixelFormat,
 }
 
 impl QuickFrame {

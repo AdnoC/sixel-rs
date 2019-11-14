@@ -1,5 +1,3 @@
-use sixel::*;
-
 pub type Status<T> = Result<T, Error>;
 
 // NOTE: Sometimes a message can accompany errors.
@@ -27,7 +25,7 @@ pub enum Error {
 }
 
 #[doc(hidden)]
-pub fn from_libsixel(status: SIXELSTATUS) -> Status<()> {
+pub fn from_libsixel(status: sixel::status::Status) -> Status<()> {
     match status as u32 {
         SIXEL_OK => Ok(()),
         SIXEL_FALSE => Err(Error::False),
